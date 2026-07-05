@@ -1056,6 +1056,9 @@ if op["found"]:
 else:
     st.warning(f"⚠️ {op['message']}")
 
+st.info("ℹ️ **Test Data Notice:** Internally calculated wellbore trajectories (MD, TVD, inclination), pressure-dependent PVT tables (P, Bo, Rs, viscosity, z-factor), and depth vs. temperature profiles are generated using standard benchmark test datasets.")
+
+
 
 # ══════════════════════════════════════════════════════════════════════════════ #
 #  MAIN TABS                                                                    #
@@ -1216,6 +1219,7 @@ with tab3:
 
     with col_vlp2:
         st.markdown("**Wellbore Pressure Profile**")
+        st.caption("ℹ️ *Profile & trajectory (MD/TVD/inclination/temp) based on internal test dataset models.*")
         if data["profile_data"]:
             depths_p = [d for d, _ in data["profile_data"]]
             press_p  = [p for _, p in data["profile_data"]]
@@ -1284,6 +1288,7 @@ with tab4:
         # PVT table at key pressures
         st.markdown('<div class="section-header">🧪 PVT Properties</div>',
                     unsafe_allow_html=True)
+        st.caption("ℹ️ *Pressure-dependent table (P, Bo, Rs, viscosity, z-factor) calculated from internal test dataset models.*")
         pvt_pressures = [Pr, bubble_pt, op["Pwf"], whp] if op["Pwf"] > 0 else [Pr, bubble_pt, whp]
         pvt_pressures = sorted(set([max(14.7, p) for p in pvt_pressures]), reverse=True)
         pvt_rows = []
@@ -1399,6 +1404,7 @@ with tab4:
 with tab5:
     st.markdown('<div class="section-header">🛠️ Completion String Design</div>',
                 unsafe_allow_html=True)
+    st.caption("ℹ️ *Packer depth and tubing string components are computed from test wellbore trajectory assumptions.*")
 
     comp = data["completion_string"]
     summary = data["completion_summary"]
@@ -1486,6 +1492,8 @@ with tab6:
     report_md = f"""
 # Nodal Analysis Report
 **Generated:** {now}
+
+> ℹ️ **Test Data Notice:** Wellbore trajectory (MD, TVD, inclination), pressure-dependent PVT tables (P, Bo, Rs, viscosity, z-factor), and depth vs. temperature profiles are generated using standard benchmark test datasets.
 
 ---
 

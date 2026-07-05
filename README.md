@@ -10,6 +10,7 @@
 - **Completion Design**: Packer depth, tubing string schematic  
 - **Sensitivity Analysis**: WHP, Water Cut, GOR sweeps  
 - **Downloadable Report**: Full markdown report of every run  
+- **Test Dataset Models**: Wellbore trajectory (MD/TVD/Inclination), pressure-dependent PVT tables, and temperature profiles are generated internally using standard PIPESIM benchmark test datasets.
 
 ## Run Locally
 
