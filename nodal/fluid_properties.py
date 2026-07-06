@@ -24,6 +24,11 @@ import math
 import numpy as np
 
 
+def _safe_exp(val: float) -> float:
+    """Safe exponential that clamps argument to prevent math range overflow."""
+    return math.exp(max(-700.0, min(700.0, val)))
+
+
 class FluidProperties:
     """
     Compute PVT properties for an oil-gas-water system.
@@ -81,9 +86,9 @@ class FluidProperties:
         """
         if Rs <= 0:
             return 14.7
-        x = 0.0125 * self.api - 0.00091 * T_F
-        Pb = 18.2 * ((Rs / self.gas_sg) ** 0.83 * (10.0 ** x) - 1.4)
-        return max(14.7, Pb)
+        x = max(-300.0, min(300.0, 0.0125 * self.api - 0.00091 * T_F))
+        Pb = 18.2 * ((Rs / max(self.gas_sg, 0.01)) ** 0.83 * (10.0 ** x) - 1.4)
+        return max(14.7, min(50000.0, Pb))
 
     # ------------------------------------------------------------------ #
     #  SOLUTION GOR  (Standing, 1977 – inverse of bubble-point)           #
@@ -96,8 +101,9 @@ class FluidProperties:
         if P >= self.bubble_point:
             return self.gor  # all gas in solution above bubble-point
         # Standing inverse: Rs = gamma_g * ((Pb/18.2 + 1.4) / 10^x)^(1/0.83)
-        x = 0.0125 * self.api - 0.00091 * T_F
-        Rs = self.gas_sg * ((P / 18.2 + 1.4) / (10.0 ** x)) ** (1.0 / 0.83)
+        x = max(-300.0, min(300.0, 0.0125 * self.api - 0.00091 * T_F))
+        denom = max(1e-10, 10.0 ** x)
+        Rs = self.gas_sg * ((P / 18.2 + 1.4) / denom) ** (1.0 / 0.83)
         return max(0.0, min(Rs, self.gor))
 
     # ------------------------------------------------------------------ #
@@ -106,9 +112,9 @@ class FluidProperties:
     def oil_fvf(self, P: float, T_F: float) -> float:
         """Oil FVF Bo (RB/STB) – Standing (1947)."""
         Rs = self.solution_gor(P, T_F)
-        F = Rs * (self.gas_sg / self.oil_sg) ** 0.5 + 1.25 * T_F
-        Bo = 0.972 + 1.47e-4 * F ** 1.175
-        return max(1.0, Bo)
+        F = Rs * (self.gas_sg / max(self.oil_sg, 0.01)) ** 0.5 + 1.25 * T_F
+        Bo = 0.972 + 1.47e-4 * (max(0.0, F) ** 1.175)
+        return max(1.0, min(100.0, Bo))
 
     # ------------------------------------------------------------------ #
     #  GAS Z-FACTOR  (Papay, 1968 – fast explicit approximation)          #
@@ -124,16 +130,18 @@ class FluidProperties:
         Ppc = 756.8 - 131.0 * self.gas_sg - 3.6 * self.gas_sg ** 2   # psia
 
         T_R  = T_F + 459.67
-        Tpr  = T_R / Tpc
-        Ppr  = P   / Ppc
+        Tpr  = T_R / max(Tpc, 1.0)
+        Ppr  = P   / max(Ppc, 1.0)
 
         if Ppr < 0.001:
             return 1.0
 
         # Papay (1968) – explicit approximation
+        exp1 = max(-300.0, min(300.0, 0.9813 * Tpr))
+        exp2 = max(-300.0, min(300.0, 0.8157 * Tpr))
         z = (1.0
-             - 3.52 * Ppr / (10.0 ** (0.9813 * Tpr))
-             + 0.274 * Ppr ** 2 / (10.0 ** (0.8157 * Tpr)))
+             - 3.52 * Ppr / max(1e-10, 10.0 ** exp1)
+             + 0.274 * Ppr ** 2 / max(1e-10, 10.0 ** exp2))
 
         # Clamp to physically valid range
         return max(0.15, min(2.5, z))
@@ -154,16 +162,16 @@ class FluidProperties:
     def oil_viscosity(self, P: float, T_F: float) -> float:
         """Live-oil viscosity in cp."""
         # Dead-oil viscosity (Beggs & Robinson, 1975)
-        x = 10.0 ** (3.0324 - 0.02023 * self.api) / (T_F ** 1.163)
-        mu_od = max(0.01, 10.0 ** x - 1.0)
+        exp_val = max(-300.0, min(300.0, (3.0324 - 0.02023 * self.api) / max(T_F ** 1.163, 1e-5)))
+        mu_od = max(0.01, 10.0 ** exp_val - 1.0)
 
         Rs = self.solution_gor(P, T_F)
 
         # Chew & Connally (1959) live-oil viscosity
         A = 10.715 * (Rs + 100.0) ** (-0.515)
         B = 5.44 * (Rs + 150.0) ** (-0.338)
-        mu_o = A * mu_od ** B
-        return max(0.1, mu_o)
+        mu_o = A * (max(0.001, min(1e5, mu_od)) ** B)
+        return max(0.1, min(10000.0, mu_o))
 
     # ------------------------------------------------------------------ #
     #  GAS VISCOSITY  (Lee, Gonzalez & Eakin, 1966)                       #
@@ -175,19 +183,24 @@ class FluidProperties:
         z = self.gas_z_factor(P, T_F)
         rho_g = P * Mg / (z * 10.73 * T_R)  # lb/ft³
 
-        K = ((9.4 + 0.02 * Mg) * T_R ** 1.5) / (209.0 + 19.0 * Mg + T_R)
-        X = 3.5 + 986.0 / T_R + 0.01 * Mg
+        K = ((9.4 + 0.02 * Mg) * (T_R ** 1.5)) / max(1e-5, 209.0 + 19.0 * Mg + T_R)
+        X = 3.5 + 986.0 / max(T_R, 1e-5) + 0.01 * Mg
         Y = 2.4 - 0.2 * X
-        mu_g = 1e-4 * K * math.exp(X * (rho_g / 62.4) ** Y)
-        return max(0.005, mu_g)
+        
+        # Clamp density ratio and exponent to prevent math range error / overflow
+        rho_ratio = max(1e-5, min(100.0, rho_g / 62.4))
+        exp_arg = max(-700.0, min(700.0, X * (rho_ratio ** Y)))
+        mu_g = 1e-4 * K * _safe_exp(exp_arg)
+        return max(0.005, min(100.0, mu_g))
 
     # ------------------------------------------------------------------ #
     #  WATER VISCOSITY & FVF                                               #
     # ------------------------------------------------------------------ #
     def water_viscosity(self, T_F: float) -> float:
         """Water viscosity in cp (Van Wingen, 1950 approximation)."""
-        mu_w = math.exp(1.003 - 1.479e-2 * T_F + 1.982e-5 * T_F ** 2)
-        return max(0.1, mu_w)
+        exp_arg = max(-700.0, min(700.0, 1.003 - 1.479e-2 * T_F + 1.982e-5 * (T_F ** 2)))
+        mu_w = _safe_exp(exp_arg)
+        return max(0.1, min(100.0, mu_w))
 
     def water_fvf(self, P: float, T_F: float) -> float:
         """Water FVF Bw in RB/STB (Craft & Hawkins)."""
@@ -197,7 +210,7 @@ class FluidProperties:
             + 1.0e-6 * (T_F - 60.0) ** 2
             - 3.33e-6 * P
         )
-        return max(1.0, Bw)
+        return max(1.0, min(10.0, Bw))
 
     # ------------------------------------------------------------------ #
     #  MIXTURE PROPERTIES  (for VLP correlations)                          #
@@ -245,8 +258,8 @@ class FluidProperties:
         else:
             rho_L = self.rho_oil_sc
 
-        # Gas density at reservoir conditions
-        rho_g = max(0.01, self.rho_gas_sc / max(Bg * 5.615, 1e-6))  # lb/ft³
+        # Gas density at reservoir conditions (clamped to physical upper limit ~50 lb/ft³)
+        rho_g = max(0.01, min(50.0, self.rho_gas_sc / max(Bg * 5.615, 1e-6)))  # lb/ft³
 
         # Viscosities
         mu_oil   = self.oil_viscosity(P, T_F)

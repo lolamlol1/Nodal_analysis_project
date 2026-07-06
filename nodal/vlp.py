@@ -155,7 +155,7 @@ class VLPCalculator:
             dP_a = grad["accel_gradient"]    * dz
 
             P_current += dP_g + dP_f + dP_a
-            P_current = max(P_current, 14.7)
+            P_current = max(14.7, min(50000.0, P_current))
 
             dP_grav_total += dP_g
             dP_fric_total += dP_f

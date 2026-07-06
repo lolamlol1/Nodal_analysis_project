@@ -990,8 +990,7 @@ if run_btn or "last_results" not in st.session_state:
                 "sel_tubing": sel_tubing,
             }
         except Exception as e:
-            st.error(f"❌ Analysis failed: {e}")
-            st.exception(e)
+            st.error("❌ **Simulation Error:** The combination of input parameters (e.g. extreme flow rate, very small tubing size, or out-of-range pressures) resulted in unresolvable flow conditions or excessive pressure losses. Please adjust your parameters to within standard operating bounds.")
             st.stop()
 else:
     data = st.session_state["last_results"]
